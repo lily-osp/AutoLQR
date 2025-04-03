@@ -1,0 +1,21 @@
+# Syntax Highlighting for AutoLQR library
+# Keywords.txt format:
+# KEYWORD	KEYWORD_TOKENTYPE
+
+# Classes (KEYWORD1)
+AutoLQR	KEYWORD1
+
+# Methods and Functions (KEYWORD2)
+setStateMatrix	KEYWORD2
+setInputMatrix	KEYWORD2
+setCostMatrices	KEYWORD2
+computeGains	KEYWORD2
+updateState	KEYWORD2
+calculateControl	KEYWORD2
+setGains	KEYWORD2
+matrixMultiply	KEYWORD2
+transposeMatrix	KEYWORD2
+invertMatrix	KEYWORD2
+computeGainMatrix	KEYWORD2
+
+# Constants (LITERAL1)
