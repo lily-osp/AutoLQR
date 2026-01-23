@@ -3,6 +3,17 @@
 
 #include <Arduino.h>
 
+/**
+ * @file AutoLQR.h
+ * @brief Dynamic allocation LQR controller
+ * 
+ * This class uses heap allocation for flexibility in system sizing.
+ * For memory-constrained systems or to avoid heap fragmentation,
+ * consider using AutoLQRStatic<N,M> from AutoLQRStatic.h instead.
+ * 
+ * @see AutoLQRStatic for static allocation variant
+ */
+
 class AutoLQR {
 public:
     /**
@@ -40,10 +51,37 @@ public:
     bool setCostMatrices(const float* Q, const float* R);
 
     /**
-     * @brief Compute optimal feedback gains
+     * @brief Compute optimal feedback gains using current solver parameters
      * @return true if successful, false if computation fails
      */
     bool computeGains();
+
+    /**
+     * @brief Compute optimal feedback gains with specified solver parameters
+     * @param maxIterations Maximum number of DARE solver iterations
+     * @param tolerance Convergence tolerance for DARE solver
+     * @return true if successful, false if computation fails
+     */
+    bool computeGains(int maxIterations, float tolerance);
+
+    /**
+     * @brief Set solver parameters for DARE computation
+     * @param maxIterations Maximum number of iterations (default: 100)
+     * @param tolerance Convergence tolerance (default: 1e-6)
+     */
+    void setSolverParameters(int maxIterations, float tolerance);
+
+    /**
+     * @brief Get current maximum iterations setting
+     * @return Maximum iterations value
+     */
+    int getMaxIterations() const;
+
+    /**
+     * @brief Get current tolerance setting
+     * @return Tolerance value
+     */
+    float getTolerance() const;
 
     /**
      * @brief Update the controller with current state
@@ -113,6 +151,10 @@ private:
     float* K; ///< Control gain matrix
     float* state; ///< Current state
     float* P; ///< Riccati equation solution
+
+    // Solver parameters
+    int solverMaxIterations; ///< Maximum DARE solver iterations
+    float solverTolerance; ///< DARE convergence tolerance
 
     // Helper functions
 

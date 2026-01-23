@@ -11,6 +11,8 @@ AutoLQR::AutoLQR(int stateSize, int controlSize)
     , K(nullptr)
     , state(nullptr)
     , P(nullptr)
+    , solverMaxIterations(100)
+    , solverTolerance(1e-6f)
 {
     if (stateSize > 0 && controlSize > 0) {
         A = new float[stateSize * stateSize]();
@@ -69,6 +71,44 @@ void AutoLQR::setGains(const float* inputK)
 bool AutoLQR::computeGains()
 {
     return computeGainMatrix();
+}
+
+bool AutoLQR::computeGains(int maxIterations, float tolerance)
+{
+    // Temporarily set solver parameters and compute
+    int oldMaxIter = solverMaxIterations;
+    float oldTol = solverTolerance;
+    
+    solverMaxIterations = maxIterations;
+    solverTolerance = tolerance;
+    
+    bool result = computeGainMatrix();
+    
+    // Restore original parameters
+    solverMaxIterations = oldMaxIter;
+    solverTolerance = oldTol;
+    
+    return result;
+}
+
+void AutoLQR::setSolverParameters(int maxIterations, float tolerance)
+{
+    if (maxIterations > 0) {
+        solverMaxIterations = maxIterations;
+    }
+    if (tolerance > 0) {
+        solverTolerance = tolerance;
+    }
+}
+
+int AutoLQR::getMaxIterations() const
+{
+    return solverMaxIterations;
+}
+
+float AutoLQR::getTolerance() const
+{
+    return solverTolerance;
 }
 
 void AutoLQR::updateState(const float* currentState)
@@ -243,10 +283,7 @@ bool AutoLQR::computeGainMatrix()
     transposeMatrix(A, AT, stateSize, stateSize);
 
     // Iterate to solve DARE: P = A'PA - A'PB(R + B'PB)^(-1)B'PA + Q
-    const int maxIterations = 100; // Increased from 50
-    const float tolerance = 1e-6; // Tighter tolerance
-
-    for (int iter = 0; iter < maxIterations; iter++) {
+    for (int iter = 0; iter < solverMaxIterations; iter++) {
         // temp1 = B'P
         matrixMultiply(BT, P, temp1, controlSize, stateSize, stateSize);
 
@@ -301,7 +338,7 @@ bool AutoLQR::computeGainMatrix()
         // Update P for next iteration
         memcpy(P, P_next, sizeof(float) * stateSize * stateSize);
 
-        if (diff < tolerance) {
+        if (diff < solverTolerance) {
             break; // Converged
         }
     }

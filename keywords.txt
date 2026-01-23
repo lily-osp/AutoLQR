@@ -4,6 +4,7 @@
 
 # Classes (KEYWORD1)
 AutoLQR	KEYWORD1
+AutoLQRStatic	KEYWORD1
 
 # Methods and Functions (KEYWORD2)
 setStateMatrix	KEYWORD2
@@ -13,9 +14,18 @@ computeGains	KEYWORD2
 updateState	KEYWORD2
 calculateControl	KEYWORD2
 setGains	KEYWORD2
-matrixMultiply	KEYWORD2
-transposeMatrix	KEYWORD2
-invertMatrix	KEYWORD2
-computeGainMatrix	KEYWORD2
+isSystemControllable	KEYWORD2
+getRiccatiSolution	KEYWORD2
+getRicattiSolution	KEYWORD2
+estimateFeedforwardGain	KEYWORD2
+estimateConvergenceTime	KEYWORD2
+exportGains	KEYWORD2
+calculateExpectedCost	KEYWORD2
+getStateSize	KEYWORD2
+getControlSize	KEYWORD2
+hasValidGains	KEYWORD2
+setSolverParameters	KEYWORD2
+getMaxIterations	KEYWORD2
+getTolerance	KEYWORD2
 
 # Constants (LITERAL1)

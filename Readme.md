@@ -9,12 +9,13 @@ Linear Quadratic Regulators are a form of optimal control that balances system p
 ### Key Features
 
 - **Minimal Dependencies**: Designed to work with the Arduino core libraries only
-- **Memory Efficient**: Dynamic allocation of matrices based on system size
+- **Dual Allocation Modes**: Choose between dynamic (`AutoLQR`) or static (`AutoLQRStatic`) memory allocation
 - **Flexible System Sizing**: Support for systems with multiple states and inputs
 - **Simplified API**: Easy-to-use interface for setting up system dynamics and cost matrices
 - **Pre-computed Gains**: Option to use offline-computed gains for complex systems
 - **Optimal Control**: Implementation of discrete-time LQR control theory
 - **Matrix Operations**: Built-in matrix utilities for embedded control applications
+- **Configurable Solver**: Adjustable iteration count and tolerance for DARE solver (static version)
 
 ## Installation
 
@@ -65,6 +66,45 @@ Once P converges, the optimal gain matrix K is calculated as:
 $$K = (R + B^T P B)^{-1} B^T P A$$
 
 ## Using the Library
+
+### Choosing Allocation Mode
+
+AutoLQR provides two variants:
+
+| Variant | Header | Memory | Use Case |
+|---------|--------|--------|----------|
+| `AutoLQR` | AutoLQR.h | Dynamic (heap) | Flexible sizing, prototyping |
+| `AutoLQRStatic<N,M>` | AutoLQRStatic.h | Static (stack/global) | Production, memory-constrained |
+
+**Recommendation**: Use `AutoLQRStatic` for production deployments to avoid heap fragmentation.
+
+### Dynamic Allocation (AutoLQR)
+
+```cpp
+#include <AutoLQR.h>
+
+#define STATE_SIZE 2
+#define CONTROL_SIZE 1
+
+// Create controller instance (allocates memory on heap)
+AutoLQR controller(STATE_SIZE, CONTROL_SIZE);
+```
+
+### Static Allocation (AutoLQRStatic)
+
+```cpp
+#include <AutoLQRStatic.h>
+
+// Create controller with compile-time fixed sizes
+// No heap allocation - all memory is statically allocated
+AutoLQRStatic<2, 1> controller;  // 2 states, 1 control
+```
+
+Benefits of static allocation:
+- No heap fragmentation
+- Predictable memory usage at compile time
+- Slightly faster (no allocation overhead)
+- Configurable solver parameters
 
 ### System Initialization
 
@@ -129,11 +169,21 @@ controller.setCostMatrices(Q, R);
 Once the system is defined, compute the optimal gains:
 
 ```cpp
+// Dynamic version (AutoLQR)
 if (controller.computeGains()) {
   Serial.println("Gain computation successful");
 } else {
   Serial.println("Error: Failed to compute gains");
 }
+
+// With custom solver parameters (both versions)
+if (controller.computeGains(150, 1e-7f)) {  // 150 iterations, tighter tolerance
+  Serial.println("Gain computation successful");
+}
+
+// Or set parameters persistently (AutoLQR only)
+controller.setSolverParameters(150, 1e-7f);
+controller.computeGains();  // Uses saved parameters
 ```
 
 ### Using the Controller
@@ -294,17 +344,26 @@ See the examples folder for detailed implementation examples.
 
 - Reduce system size if possible
 - Use pre-computed gains instead of on-board computation
-- Consider static allocation for very constrained systems
+- Use `AutoLQRStatic<N,M>` instead of `AutoLQR` to avoid heap fragmentation
+- Check compile-time memory usage with static allocation
 
 ## API Reference
 
-### Constructor
+### Constructors
 
+**Dynamic Allocation (AutoLQR)**
 ```cpp
 AutoLQR(int stateSize, int controlSize)
 ```
 - `stateSize`: Number of state variables
 - `controlSize`: Number of control inputs
+
+**Static Allocation (AutoLQRStatic)**
+```cpp
+AutoLQRStatic<N, M>()
+```
+- `N`: State size (template parameter, compile-time constant)
+- `M`: Control size (template parameter, compile-time constant, max 3)
 
 ### Core Methods
 
@@ -324,9 +383,17 @@ bool setCostMatrices(const float* Q, const float* R)
 Sets the state cost matrix Q and control cost matrix R. Returns success/failure.
 
 ```cpp
-bool computeGains()
+bool computeGains()  // Uses current solver parameters
+bool computeGains(int maxIterations, float tolerance)  // With custom parameters
 ```
-Computes the optimal feedback gains by solving the discrete algebraic Riccati equation. Returns success/failure.
+Computes the optimal feedback gains by solving the discrete algebraic Riccati equation. Returns success/failure. Both versions support configurable solver parameters.
+
+```cpp
+void setSolverParameters(int maxIterations, float tolerance)  // AutoLQR only
+int getMaxIterations() const
+float getTolerance() const
+```
+Configure and query DARE solver parameters. Default: 100 iterations, 1e-6 tolerance.
 
 ```cpp
 void updateState(const float* currentState)
@@ -351,9 +418,17 @@ bool isSystemControllable()
 Checks if the system is controllable. Returns true/false.
 
 ```cpp
-const float* getRicattiSolution() const
+const float* getRiccatiSolution() const  // AutoLQRStatic (correct spelling)
+const float* getRicattiSolution() const  // AutoLQR (legacy spelling)
 ```
 Gets the solution of the Riccati equation (P matrix).
+
+**AutoLQRStatic Additional Methods**
+```cpp
+constexpr int getStateSize() const
+constexpr int getControlSize() const
+bool hasValidGains() const
+```
 
 ```cpp
 void estimateFeedforwardGain(float* ffGain, const float* desiredState)
