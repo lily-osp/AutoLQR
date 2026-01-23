@@ -239,20 +239,191 @@ bool AutoLQR::invertMatrix(const float* matrix, float* result, int n)
 
 bool AutoLQR::isSystemControllable()
 {
-    // Basic controllability check for 2x2 systems
-    if (stateSize == 2 && controlSize == 1) {
-        float det = B[0] * A[1] - B[1] * A[0];
-        return fabs(det) > 1e-6;
-    }
+    // Use full controllability matrix check
+    int rank = getControllabilityRank();
+    return rank == stateSize;
+}
 
-    // For larger systems, implement a more sophisticated controllability check
-    // or return true and let the DARE solver determine feasibility
+bool AutoLQR::getControllabilityMatrix(float* C)
+{
+    if (!C || !A || !B)
+        return false;
+    
+    buildControllabilityMatrix(C);
     return true;
+}
+
+int AutoLQR::getControllabilityRank()
+{
+    if (!A || !B || stateSize <= 0 || controlSize <= 0)
+        return -1;
+    
+    // Controllability matrix size: stateSize x (stateSize * controlSize)
+    int cols = stateSize * controlSize;
+    float* C = new float[stateSize * cols]();
+    
+    buildControllabilityMatrix(C);
+    
+    // Compute rank using Gaussian elimination
+    int rank = computeMatrixRank(C, stateSize, cols);
+    
+    delete[] C;
+    return rank;
+}
+
+int AutoLQR::getStateSize() const
+{
+    return stateSize;
+}
+
+int AutoLQR::getControlSize() const
+{
+    return controlSize;
 }
 
 const float* AutoLQR::getRicattiSolution() const
 {
     return P;
+}
+
+void AutoLQR::buildControllabilityMatrix(float* C)
+{
+    // Build controllability matrix C = [B, AB, A²B, ..., A^(n-1)B]
+    // C is stateSize x (stateSize * controlSize)
+    
+    int cols = stateSize * controlSize;
+    
+    // First block: B
+    for (int i = 0; i < stateSize; i++) {
+        for (int j = 0; j < controlSize; j++) {
+            C[i * cols + j] = B[i * controlSize + j];
+        }
+    }
+    
+    // Subsequent blocks: A^k * B for k = 1, 2, ..., stateSize-1
+    float* A_power = new float[stateSize * stateSize]();
+    float* temp = new float[stateSize * controlSize]();
+    
+    // Initialize A_power as A
+    memcpy(A_power, A, sizeof(float) * stateSize * stateSize);
+    
+    for (int k = 1; k < stateSize; k++) {
+        // Compute A^k * B
+        matrixMultiply(A_power, B, temp, stateSize, stateSize, controlSize);
+        
+        // Copy to controllability matrix
+        int colOffset = k * controlSize;
+        for (int i = 0; i < stateSize; i++) {
+            for (int j = 0; j < controlSize; j++) {
+                C[i * cols + colOffset + j] = temp[i * controlSize + j];
+            }
+        }
+        
+        // Update A_power = A_power * A for next iteration
+        float* A_new = new float[stateSize * stateSize]();
+        matrixMultiply(A_power, A, A_new, stateSize, stateSize, stateSize);
+        memcpy(A_power, A_new, sizeof(float) * stateSize * stateSize);
+        delete[] A_new;
+    }
+    
+    delete[] A_power;
+    delete[] temp;
+}
+
+int AutoLQR::computeMatrixRank(float* matrix, int rows, int cols)
+{
+    // Gaussian elimination with partial pivoting to find rank
+    // Works on a copy to preserve original matrix
+    
+    float* M = new float[rows * cols];
+    memcpy(M, matrix, sizeof(float) * rows * cols);
+    
+    const float epsilon = 1e-6f;
+    int rank = 0;
+    int pivotCol = 0;
+    
+    for (int row = 0; row < rows && pivotCol < cols; row++) {
+        // Find pivot
+        int maxRow = row;
+        float maxVal = fabs(M[row * cols + pivotCol]);
+        
+        for (int i = row + 1; i < rows; i++) {
+            float val = fabs(M[i * cols + pivotCol]);
+            if (val > maxVal) {
+                maxVal = val;
+                maxRow = i;
+            }
+        }
+        
+        if (maxVal < epsilon) {
+            // No pivot in this column, move to next column
+            pivotCol++;
+            row--;  // Stay on same row
+            continue;
+        }
+        
+        // Swap rows
+        if (maxRow != row) {
+            for (int j = 0; j < cols; j++) {
+                float temp = M[row * cols + j];
+                M[row * cols + j] = M[maxRow * cols + j];
+                M[maxRow * cols + j] = temp;
+            }
+        }
+        
+        // Eliminate column
+        for (int i = row + 1; i < rows; i++) {
+            float factor = M[i * cols + pivotCol] / M[row * cols + pivotCol];
+            for (int j = pivotCol; j < cols; j++) {
+                M[i * cols + j] -= factor * M[row * cols + j];
+            }
+        }
+        
+        rank++;
+        pivotCol++;
+    }
+    
+    delete[] M;
+    return rank;
+}
+
+float AutoLQR::computeDeterminant(const float* matrix, int n)
+{
+    if (n == 1) {
+        return matrix[0];
+    } else if (n == 2) {
+        return matrix[0] * matrix[3] - matrix[1] * matrix[2];
+    } else if (n == 3) {
+        float a = matrix[0], b = matrix[1], c = matrix[2];
+        float d = matrix[3], e = matrix[4], f = matrix[5];
+        float g = matrix[6], h = matrix[7], i = matrix[8];
+        return a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+    } else if (n == 4) {
+        // 4x4 determinant using cofactor expansion
+        float det = 0;
+        float submatrix[9];
+        
+        for (int col = 0; col < 4; col++) {
+            // Build 3x3 submatrix
+            int subi = 0;
+            for (int i = 1; i < 4; i++) {
+                int subj = 0;
+                for (int j = 0; j < 4; j++) {
+                    if (j == col) continue;
+                    submatrix[subi * 3 + subj] = matrix[i * 4 + j];
+                    subj++;
+                }
+                subi++;
+            }
+            
+            float sign = (col % 2 == 0) ? 1.0f : -1.0f;
+            det += sign * matrix[col] * computeDeterminant(submatrix, 3);
+        }
+        
+        return det;
+    }
+    
+    return 0.0f;
 }
 
 bool AutoLQR::computeGainMatrix()

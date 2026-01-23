@@ -102,10 +102,35 @@ public:
     void setGains(const float* K);
 
     /**
-     * @brief Check if the system is controllable
+     * @brief Check if the system is controllable using full controllability matrix
      * @return true if controllable, false otherwise
      */
     bool isSystemControllable();
+
+    /**
+     * @brief Build and export the controllability matrix C = [B, AB, A²B, ..., A^(n-1)B]
+     * @param C Pointer to output array (stateSize x stateSize*controlSize)
+     * @return true if successful, false otherwise
+     */
+    bool getControllabilityMatrix(float* C);
+
+    /**
+     * @brief Get the rank of the controllability matrix
+     * @return Rank of controllability matrix, or -1 if computation fails
+     */
+    int getControllabilityRank();
+
+    /**
+     * @brief Get the state size
+     * @return Number of state variables
+     */
+    int getStateSize() const;
+
+    /**
+     * @brief Get the control size
+     * @return Number of control inputs
+     */
+    int getControlSize() const;
 
     /**
      * @brief Get the solution of the Riccati equation
@@ -212,6 +237,29 @@ private:
      * @return true if successful, false otherwise
      */
     bool computeGainMatrix();
+
+    /**
+     * @brief Build the controllability matrix internally
+     * @param C Pointer to output array (stateSize x stateSize*controlSize)
+     */
+    void buildControllabilityMatrix(float* C);
+
+    /**
+     * @brief Compute rank of a matrix using Gaussian elimination
+     * @param matrix Input matrix
+     * @param rows Number of rows
+     * @param cols Number of columns
+     * @return Rank of the matrix
+     */
+    int computeMatrixRank(float* matrix, int rows, int cols);
+
+    /**
+     * @brief Compute determinant of a square matrix (up to 4x4)
+     * @param matrix Input matrix
+     * @param n Matrix size
+     * @return Determinant value
+     */
+    float computeDeterminant(const float* matrix, int n);
 };
 
 #endif

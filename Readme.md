@@ -264,14 +264,41 @@ if (expected_cost >= 0) {
 
 ### Checking System Controllability
 
-Verify if your system is controllable:
+Verify if your system is controllable using the full controllability matrix:
 
 ```cpp
 if (controller.isSystemControllable()) {
   Serial.println("System is controllable");
 } else {
-  Serial.println("Warning: System may not be controllable");
+  Serial.println("Warning: System is not controllable");
 }
+
+// Get the controllability rank
+int rank = controller.getControllabilityRank();
+Serial.print("Controllability rank: ");
+Serial.print(rank);
+Serial.print(" / ");
+Serial.println(controller.getStateSize());
+
+// Export the full controllability matrix C = [B, AB, A²B, ..., A^(n-1)B]
+float C[STATE_SIZE * STATE_SIZE * CONTROL_SIZE];
+controller.getControllabilityMatrix(C);
+```
+
+### Compile-Time Memory Calculation (Static Version)
+
+The static version provides compile-time memory size calculation:
+
+```cpp
+// Access compile-time constants
+constexpr int n = AutoLQRStatic<4, 2>::StateSize;        // 4
+constexpr int m = AutoLQRStatic<4, 2>::ControlSize;      // 2
+constexpr size_t mem = AutoLQRStatic<4, 2>::MemorySize;  // Memory in bytes
+
+// Or use the method
+Serial.print("Controller memory usage: ");
+Serial.print(controller.getMemorySize());
+Serial.println(" bytes");
 ```
 
 ## Matrix Representation
@@ -415,7 +442,17 @@ Sets pre-computed gain values directly.
 ```cpp
 bool isSystemControllable()
 ```
-Checks if the system is controllable. Returns true/false.
+Checks if the system is controllable using full controllability matrix rank. Returns true if rank equals state size.
+
+```cpp
+bool getControllabilityMatrix(float* C)
+```
+Exports the controllability matrix C = [B, AB, A²B, ..., A^(n-1)B]. Array size: stateSize x (stateSize * controlSize).
+
+```cpp
+int getControllabilityRank()
+```
+Returns the rank of the controllability matrix. System is controllable if rank equals stateSize.
 
 ```cpp
 const float* getRiccatiSolution() const  // AutoLQRStatic (correct spelling)

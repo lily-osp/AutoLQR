@@ -18,20 +18,35 @@
  *   - N >= 1 (at least one state)
  *   - M >= 1 (at least one control input)
  *   - M <= 3 (matrix inversion limited to 3x3)
+ *   - N <= 4 (controllability check limited to 4x4)
  * 
- * Memory usage (approximate):
- *   - Total: (2*N*N + 2*N*M + M*M + N + M*N) * sizeof(float) bytes
- *   - For N=2, M=1: ~52 bytes
- *   - For N=4, M=1: ~148 bytes
- *   - For N=4, M=2: ~180 bytes
+ * Memory usage is computed at compile-time via MemorySize constant.
  */
 template<int N, int M>
 class AutoLQRStatic {
     static_assert(N >= 1, "State size must be at least 1");
+    static_assert(N <= 4, "State size limited to 4 (controllability matrix constraint)");
     static_assert(M >= 1, "Control size must be at least 1");
     static_assert(M <= 3, "Control size limited to 3 (matrix inversion constraint)");
 
 public:
+    // Compile-time size constants
+    static constexpr int StateSize = N;
+    static constexpr int ControlSize = M;
+    static constexpr int ControllabilityMatrixCols = N * M;
+    
+    // Compile-time memory calculation (in bytes)
+    static constexpr size_t MemorySize = 
+        sizeof(float) * (
+            N * N +         // A matrix
+            N * M +         // B matrix
+            N * N +         // Q matrix
+            M * M +         // R matrix
+            M * N +         // K matrix
+            N +             // state vector
+            N * N           // P matrix
+        ) + sizeof(bool);   // gainsComputed flag
+
     /**
      * @brief Construct a new AutoLQRStatic controller
      * All matrices are zero-initialized
@@ -149,24 +164,41 @@ public:
     }
 
     /**
-     * @brief Check if the system is controllable
-     * @return true if controllable, false otherwise
+     * @brief Check if the system is controllable using full controllability matrix
+     * @return true if controllable (rank = N), false otherwise
      */
     bool isSystemControllable() {
-        // Full controllability matrix check for small systems
-        if (N == 2 && M == 1) {
-            // Controllability matrix [B, AB]
-            // Check rank by determinant
-            float AB[2];
-            AB[0] = A[0] * B[0] + A[1] * B[1];
-            AB[1] = A[2] * B[0] + A[3] * B[1];
-            
-            float det = B[0] * AB[1] - B[1] * AB[0];
-            return fabs(det) > 1e-6f;
-        }
-        
-        // For other systems, return true and let DARE solver determine feasibility
+        int rank = getControllabilityRank();
+        return rank == N;
+    }
+
+    /**
+     * @brief Build and export the controllability matrix C = [B, AB, A²B, ..., A^(n-1)B]
+     * @param C Pointer to output array (N x N*M)
+     * @return true if successful
+     */
+    bool getControllabilityMatrix(float* C) {
+        if (!C) return false;
+        buildControllabilityMatrix(C);
         return true;
+    }
+
+    /**
+     * @brief Get the rank of the controllability matrix
+     * @return Rank of controllability matrix
+     */
+    int getControllabilityRank() {
+        float C[N * N * M];
+        buildControllabilityMatrix(C);
+        return computeMatrixRank(C, N, N * M);
+    }
+
+    /**
+     * @brief Get compile-time memory size in bytes
+     * @return Memory usage of this controller instance
+     */
+    static constexpr size_t getMemorySize() {
+        return MemorySize;
     }
 
     /**
@@ -370,6 +402,139 @@ private:
         }
 
         return false;
+    }
+
+    /**
+     * @brief Build the controllability matrix C = [B, AB, A²B, ..., A^(n-1)B]
+     */
+    void buildControllabilityMatrix(float* C) {
+        const int cols = N * M;
+        
+        // First block: B
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < M; j++) {
+                C[i * cols + j] = B[i * M + j];
+            }
+        }
+        
+        // Compute A^k * B for k = 1 to N-1
+        float A_power[N * N];
+        float temp[N * M];
+        
+        // Initialize A_power as A
+        memcpy(A_power, A, sizeof(float) * N * N);
+        
+        for (int k = 1; k < N; k++) {
+            // Compute A^k * B
+            matrixMultiply(A_power, B, temp, N, N, M);
+            
+            // Copy to controllability matrix
+            int colOffset = k * M;
+            for (int i = 0; i < N; i++) {
+                for (int j = 0; j < M; j++) {
+                    C[i * cols + colOffset + j] = temp[i * M + j];
+                }
+            }
+            
+            // Update A_power = A_power * A
+            float A_new[N * N];
+            matrixMultiply(A_power, A, A_new, N, N, N);
+            memcpy(A_power, A_new, sizeof(float) * N * N);
+        }
+    }
+
+    /**
+     * @brief Compute rank of a matrix using Gaussian elimination
+     */
+    int computeMatrixRank(float* matrix, int rows, int cols) {
+        // Work on a copy
+        float M_copy[N * N * M];  // Maximum size needed
+        memcpy(M_copy, matrix, sizeof(float) * rows * cols);
+        
+        const float epsilon = 1e-6f;
+        int rank = 0;
+        int pivotCol = 0;
+        
+        for (int row = 0; row < rows && pivotCol < cols; row++) {
+            // Find pivot
+            int maxRow = row;
+            float maxVal = fabs(M_copy[row * cols + pivotCol]);
+            
+            for (int i = row + 1; i < rows; i++) {
+                float val = fabs(M_copy[i * cols + pivotCol]);
+                if (val > maxVal) {
+                    maxVal = val;
+                    maxRow = i;
+                }
+            }
+            
+            if (maxVal < epsilon) {
+                pivotCol++;
+                row--;
+                continue;
+            }
+            
+            // Swap rows
+            if (maxRow != row) {
+                for (int j = 0; j < cols; j++) {
+                    float temp = M_copy[row * cols + j];
+                    M_copy[row * cols + j] = M_copy[maxRow * cols + j];
+                    M_copy[maxRow * cols + j] = temp;
+                }
+            }
+            
+            // Eliminate column
+            for (int i = row + 1; i < rows; i++) {
+                float factor = M_copy[i * cols + pivotCol] / M_copy[row * cols + pivotCol];
+                for (int j = pivotCol; j < cols; j++) {
+                    M_copy[i * cols + j] -= factor * M_copy[row * cols + j];
+                }
+            }
+            
+            rank++;
+            pivotCol++;
+        }
+        
+        return rank;
+    }
+
+    /**
+     * @brief Compute determinant of a square matrix (up to 4x4)
+     */
+    float computeDeterminant(const float* matrix, int n) {
+        if (n == 1) {
+            return matrix[0];
+        } else if (n == 2) {
+            return matrix[0] * matrix[3] - matrix[1] * matrix[2];
+        } else if (n == 3) {
+            float a = matrix[0], b = matrix[1], c = matrix[2];
+            float d = matrix[3], e = matrix[4], f = matrix[5];
+            float g = matrix[6], h = matrix[7], i = matrix[8];
+            return a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+        } else if (n == 4) {
+            float det = 0;
+            float submatrix[9];
+            
+            for (int col = 0; col < 4; col++) {
+                int subi = 0;
+                for (int i = 1; i < 4; i++) {
+                    int subj = 0;
+                    for (int j = 0; j < 4; j++) {
+                        if (j == col) continue;
+                        submatrix[subi * 3 + subj] = matrix[i * 4 + j];
+                        subj++;
+                    }
+                    subi++;
+                }
+                
+                float sign = (col % 2 == 0) ? 1.0f : -1.0f;
+                det += sign * matrix[col] * computeDeterminant(submatrix, 3);
+            }
+            
+            return det;
+        }
+        
+        return 0.0f;
     }
 
     /**
