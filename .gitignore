@@ -1,1 +1,3 @@
 *.db
+*.o
+test_gauss_jordan

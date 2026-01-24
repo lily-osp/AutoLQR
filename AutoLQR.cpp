@@ -187,12 +187,14 @@ void AutoLQR::transposeMatrix(const float* matrix, float* result, int rows, int 
     }
 }
 
-// Matrix inversion for small matrices (1x1, 2x2, 3x3)
+// Matrix inversion for small matrices (1x1, 2x2, 3x3) using closed-form
+// and Gauss-Jordan elimination for larger matrices (4x4 and above)
 bool AutoLQR::invertMatrix(const float* matrix, float* result, int n)
 {
     if (!matrix || !result)
         return false;
 
+    // Use closed-form solutions for small matrices (faster, no heap allocation)
     if (n == 1) {
         if (fabs(matrix[0]) < 1e-6)
             return false;
@@ -209,7 +211,7 @@ bool AutoLQR::invertMatrix(const float* matrix, float* result, int n)
         result[3] = matrix[0] * invDet;
         return true;
     } else if (n == 3) {
-        // 3x3 Matrix inversion
+        // 3x3 Matrix inversion using Sarrus rule
         float a = matrix[0], b = matrix[1], c = matrix[2];
         float d = matrix[3], e = matrix[4], f = matrix[5];
         float g = matrix[6], h = matrix[7], i = matrix[8];
@@ -233,8 +235,76 @@ bool AutoLQR::invertMatrix(const float* matrix, float* result, int n)
         return true;
     }
 
-    // For larger matrices, use a different method or precompute
-    return false;
+    // For matrices 4x4 and larger, use Gauss-Jordan elimination
+    // with partial pivoting for numerical stability
+    
+    // Allocate augmented matrix [A|I] of size n x 2n
+    float* aug = new float[n * 2 * n];
+    if (!aug)
+        return false;
+    
+    // Initialize augmented matrix: [A|I]
+    for (int row = 0; row < n; row++) {
+        for (int col = 0; col < n; col++) {
+            aug[row * 2 * n + col] = matrix[row * n + col];
+            aug[row * 2 * n + (col + n)] = (row == col) ? 1.0f : 0.0f;
+        }
+    }
+    
+    // Gauss-Jordan elimination with partial pivoting
+    for (int col = 0; col < n; col++) {
+        // Find pivot (row with maximum absolute value in current column)
+        int maxRow = col;
+        float maxVal = fabs(aug[col * 2 * n + col]);
+        for (int row = col + 1; row < n; row++) {
+            float val = fabs(aug[row * 2 * n + col]);
+            if (val > maxVal) {
+                maxVal = val;
+                maxRow = row;
+            }
+        }
+        
+        // Check for singular matrix
+        if (maxVal < 1e-6f) {
+            delete[] aug;
+            return false;
+        }
+        
+        // Swap rows if needed
+        if (maxRow != col) {
+            for (int k = 0; k < 2 * n; k++) {
+                float tmp = aug[col * 2 * n + k];
+                aug[col * 2 * n + k] = aug[maxRow * 2 * n + k];
+                aug[maxRow * 2 * n + k] = tmp;
+            }
+        }
+        
+        // Scale pivot row to make pivot element 1
+        float pivot = aug[col * 2 * n + col];
+        for (int k = 0; k < 2 * n; k++) {
+            aug[col * 2 * n + k] /= pivot;
+        }
+        
+        // Eliminate column in all other rows
+        for (int row = 0; row < n; row++) {
+            if (row != col) {
+                float factor = aug[row * 2 * n + col];
+                for (int k = 0; k < 2 * n; k++) {
+                    aug[row * 2 * n + k] -= factor * aug[col * 2 * n + k];
+                }
+            }
+        }
+    }
+    
+    // Extract inverse from right side of augmented matrix
+    for (int row = 0; row < n; row++) {
+        for (int col = 0; col < n; col++) {
+            result[row * n + col] = aug[row * 2 * n + (col + n)];
+        }
+    }
+    
+    delete[] aug;
+    return true;
 }
 
 bool AutoLQR::isSystemControllable()

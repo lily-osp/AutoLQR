@@ -11,7 +11,14 @@
  * For memory-constrained systems or to avoid heap fragmentation,
  * consider using AutoLQRStatic<N,M> from AutoLQRStatic.h instead.
  * 
- * @see AutoLQRStatic for static allocation variant
+ * Features:
+ *   - Supports arbitrary state size (stateSize)
+ *   - Supports arbitrary control size (controlSize)
+ *   - Matrix inversion uses closed-form for 1x1, 2x2, 3x3 (fast)
+ *   - Matrix inversion uses Gauss-Jordan for 4x4 and larger
+ *   - Controllability checking via rank computation
+ * 
+ * @see AutoLQRStatic for static allocation variant (limited to controlSize <= 3)
  */
 
 class AutoLQR {

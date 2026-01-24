@@ -71,12 +71,12 @@ $$K = (R + B^T P B)^{-1} B^T P A$$
 
 AutoLQR provides two variants:
 
-| Variant | Header | Memory | Use Case |
-|---------|--------|--------|----------|
-| `AutoLQR` | AutoLQR.h | Dynamic (heap) | Flexible sizing, prototyping |
-| `AutoLQRStatic<N,M>` | AutoLQRStatic.h | Static (stack/global) | Production, memory-constrained |
+| Variant | Header | Memory | Control Size Limit | Use Case |
+|---------|--------|--------|-------------------|----------|
+| `AutoLQR` | AutoLQR.h | Dynamic (heap) | Unlimited | Flexible sizing, MIMO systems, prototyping |
+| `AutoLQRStatic<N,M>` | AutoLQRStatic.h | Static (stack/global) | M <= 3 | Production, memory-constrained |
 
-**Recommendation**: Use `AutoLQRStatic` for production deployments to avoid heap fragmentation.
+**Recommendation**: Use `AutoLQRStatic` for production deployments to avoid heap fragmentation. Use `AutoLQR` for MIMO systems requiring more than 3 control inputs.
 
 ### Dynamic Allocation (AutoLQR)
 
@@ -329,6 +329,9 @@ For a 2-state, 1-control system, approximately 72 bytes of RAM are used.
 
 - Matrix multiplication: O(n³) for n×n matrices
 - DARE solver: O(k×n³) where k is the number of iterations
+- Matrix inversion (dynamic version):
+  - 1x1, 2x2, 3x3: O(n²) closed-form solutions (fast, no extra memory)
+  - 4x4 and larger: O(n³) Gauss-Jordan elimination with partial pivoting
 - Systems with more than 3 states may be computationally intensive
 
 ### Optimization Tips
