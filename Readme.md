@@ -1,5 +1,6 @@
 # AutoLQR
 
+![Blotcat balancing an inverted pendulum using optimal control theory](assets/blotcat-hero.jpg)
 A lightweight Linear Quadratic Regulator (LQR) controller library for Arduino and compatible microcontrollers. AutoLQR provides an easy-to-use implementation of LQR control theory for small embedded systems.
 
 ## Overview
@@ -57,6 +58,7 @@ where K is the optimal feedback gain matrix computed by solving the Discrete Alg
 
 ### Discrete Algebraic Riccati Equation
 
+![Blotcat solving the DARE equation on a blackboard to find optimal gain](assets/blotcat-dare.jpg)
 The AutoLQR library solves the DARE iteratively:
 
 $$P = A^T P A - A^T P B (R + B^T P B)^{-1} B^T P A + Q$$
@@ -69,6 +71,7 @@ $$K = (R + B^T P B)^{-1} B^T P A$$
 
 ### Choosing Allocation Mode
 
+![Blotcat organizing memory blocks into a dynamic bag and a static safe](assets/blotcat-allocation.jpg)
 AutoLQR provides two variants:
 
 | Variant | Header | Memory | Control Size Limit | Use Case |
